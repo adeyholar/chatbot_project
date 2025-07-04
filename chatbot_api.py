@@ -12,8 +12,6 @@ class ChatbotAPI:
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
         self.history = []
         self.local_mode = False
-
-        # Initialize local model if provided
         if local_model_path:
             self.accelerator = Accelerator()
             self.device = self.accelerator.device
@@ -37,9 +35,7 @@ class ChatbotAPI:
     def generate_response(self, user_input, max_length=50):
         self.history.append(f"User: {user_input}")
         context = " ".join(self.history[-3:])
-
         if self.local_mode:
-            # Local inference
             inputs = self.tokenizer(
                 context,
                 return_tensors="pt",
@@ -61,7 +57,6 @@ class ChatbotAPI:
                 clean_up_tokenization_spaces=True
             )
         else:
-            # API inference
             payload = {
                 "inputs": context,
                 "parameters": {
@@ -87,39 +82,9 @@ class ChatbotAPI:
                 print(f"API request failed: {e}. Falling back to local model if available.")
                 if not self.local_mode:
                     raise RuntimeError("No local model available for fallback.")
-                return self.generate_response(user_input, max_length)  # Retry with local mode
-
+                return self.generate_response(user_input, max_length)
         self.history.append(f"Bot: {response}")
         return response
 
     def get_history(self):
         return self.history
-
-def main():
-    load_dotenv()
-    api_key = os.getenv("HUGGINGFACE_API_KEY")
-    if not api_key:
-        raise ValueError("HUGGINGFACE_API_KEY not found in .env file")
-
-    # Initialize chatbot with local fallback
-    local_model_path = r"D:\AI\Models\blenderbot_1B"
-    print("Initializing Hugging Face API chatbot with local fallback")
-    chatbot = ChatbotAPI(api_key, local_model_path=local_model_path)
-
-    print("Start chatting! Type 'exit' to quit.")
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() == "exit":
-            break
-        try:
-            response = chatbot.generate_response(user_input)
-            print(f"Bot: {response}")
-        except Exception as e:
-            print(f"Error: {e}")
-
-    print("\nConversation History:")
-    for turn in chatbot.get_history():
-        print(turn)
-
-if __name__ == "__main__":
-    main()
