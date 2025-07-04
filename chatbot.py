@@ -10,6 +10,7 @@ class Chatbot:
     def __init__(self, model_path):
         # Initialize Accelerator for GPU optimization
         self.accelerator = Accelerator()
+        self.device = self.accelerator.device  # cuda:0 if GPU available
 
         # Check CUDA availability
         if not torch.cuda.is_available():
@@ -27,9 +28,8 @@ class Chatbot:
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
             model_path,
-            quantization_config=quantization_config,
-            device_map="auto"
-        )
+            quantization_config=quantization_config
+        ).to(self.device)
 
         # Prepare model with Accelerator
         self.model = self.accelerator.prepare(self.model)
@@ -48,7 +48,7 @@ class Chatbot:
             return_tensors="pt",
             padding=True,
             truncation=True
-        ).to(self.accelerator.device)
+        ).to(self.device)
 
         # Generate response with explicit parameters
         outputs = self.model.generate(

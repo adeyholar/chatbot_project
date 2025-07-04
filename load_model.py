@@ -8,51 +8,64 @@ os.environ["HF_HOME"] = r"D:\AI\Models\huggingface"
 
 # Initialize Accelerator for GPU optimization
 accelerator = Accelerator()
+device = accelerator.device  # cuda:0 if GPU available
+
+# Check CUDA availability
+if not torch.cuda.is_available():
+    raise RuntimeError("CUDA is not available. Please check GPU setup.")
 
 # Model selection
 model_name = "facebook/blenderbot-400M-distill"
 print(f"Loading model: {model_name}")
 
-# Step 1: Update Quantization with BitsAndBytesConfig
-# This replaces the deprecated load_in_4bit argument
+# Quantization configuration
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_quant_type="nf4", # Recommended 4-bit quantization type
+    bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True,
-    bnb_4bit_compute_dtype=torch.bfloat16 # Use bfloat16 for computation if your GPU supports it, else use torch.float16
+    bnb_4bit_compute_dtype=torch.bfloat16
 )
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# Load model with the new quantization configuration
-model = AutoModelForSeq2SeqLM.from_pretrained(
-    model_name,
-    quantization_config=quantization_config, # Pass the BitsAndBytesConfig object
-    device_map="cuda:0"   # CHANGED: Explicitly map to cuda:0 instead of "auto"
-)
+# Load model with quantization
+try:
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        model_name,
+        quantization_config=quantization_config
+    ).to(device)
+except Exception as e:
+    print(f"Failed to load model with quantization: {e}")
+    print("Falling back to CPU without quantization.")
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
 
 # Prepare model with Accelerator
 model = accelerator.prepare(model)
 
-# Verify model is on GPU
+# Verify model device
 print(f"Model device: {next(model.parameters()).device}")
 
 # Test tokenizer with sample input
 sample_input = "Hello, how are you?"
-inputs = tokenizer(sample_input, return_tensors="pt").to(accelerator.device)
+inputs = tokenizer(sample_input, return_tensors="pt").to(device)
 print(f"Tokenized input: {inputs}")
 
-# Test model inference
+# Test model inference with explicit generation parameters
 outputs = model.generate(
     **inputs,
-    max_length=60,         # Adjust as needed
-    min_length=20,
-    num_beams=10,
+    max_length=50,
+    num_beams=5,
     length_penalty=0.65,
-    no_repeat_ngram_size=3
+    no_repeat_ngram_size=3,
+    do_sample=True,
+    temperature=0.7
 )
-response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+response = tokenizer.decode(
+    outputs[0],
+    skip_special_tokens=True,
+    clean_up_tokenization_spaces=True
+)
 print(f"Sample response: {response}")
 
 # Save model and tokenizer locally
